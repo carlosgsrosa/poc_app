@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "562277489794",
+    "project_id": "poc-app-aa379",
+    "storage_bucket": "poc-app-aa379.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:562277489794:android:28015dcebede2a26e7a89b",
+        "android_client_info": {
+          "package_name": "com.poc.poc_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "562277489794-tsv1uj9dcn978t8a61m62sr90gg49hj7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDs4-5eZL1Yd0wmOpYvO4vKChjF_3Jh9dE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "562277489794-tsv1uj9dcn978t8a61m62sr90gg49hj7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

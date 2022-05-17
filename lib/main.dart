@@ -1,15 +1,24 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+  static FirebaseAnalyticsObserver observer =
+      FirebaseAnalyticsObserver(analytics: analytics);
 
   @override
   Widget build(BuildContext context) {
@@ -18,26 +27,54 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: "Einstein's POC"),
+      home: MyHomePage(
+        title: "Einstein's POC",
+        analytics: analytics,
+        observer: observer,
+      ),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
+  const MyHomePage({
+    Key? key,
+    required this.title,
+    required this.analytics,
+    required this.observer,
+  }) : super(key: key);
 
   final String title;
+  final FirebaseAnalytics analytics;
+  final FirebaseAnalyticsObserver observer;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  bool isOffline = false;
+  String _message = '';
   Color _connectionStatusColor = Colors.red;
   final Connectivity _connectivity = Connectivity();
   String _connectionStatus = "SEM CONEXAO";
+
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
+
+  void setMessage(String message) {
+    setState(() => _message = message);
+  }
+
+  Future<void> _sendAnalyticsEvent(String status, String type) async {
+    await widget.analytics.logEvent(
+      name: 'connectivity_status',
+      parameters: <String, dynamic>{
+        'string': 'string',
+        'status': status,
+        'type': type,
+      },
+    );
+    setMessage('_sendAnalyticsEvent succeeded');
+  }
 
   @override
   void initState() {
@@ -79,34 +116,25 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _updateConnectionStatus(ConnectivityResult result) async {
     if (result == ConnectivityResult.wifi) {
-      setState(() {
-        _connectionStatus = "Wifi";
-      });
-      setState(() {
-        _connectionStatusColor = Colors.green;
-      });
+      setState(() => _connectionStatus = "Wifi");
+      setState(() => _connectionStatusColor = Colors.green);
     } else if (result == ConnectivityResult.mobile) {
-      setState(() {
-        _connectionStatus = "Mobile";
-      });
-      setState(() {
-        _connectionStatusColor = Colors.green;
-      });
+      setState(() => _connectionStatus = "Mobile");
+      setState(() => _connectionStatusColor = Colors.green);
     } else {
-      setState(() {
-        _connectionStatus = 'SEM CONEXAO';
-      });
-      setState(() {
-        _connectionStatusColor = Colors.red;
-      });
+      setState(() => _connectionStatus = "SEM CONEXÃO");
+      setState(() => _connectionStatusColor = Colors.red);
     }
 
     if (result == ConnectivityResult.mobile ||
         result == ConnectivityResult.wifi) {
       showStatus(result, true);
+      _sendAnalyticsEvent("ON LINE", _connectionStatus);
     } else {
       showStatus(result, false);
+      _sendAnalyticsEvent("OFF LINE", _connectionStatus);
     }
+    print("###### ${_connectionStatus}");
   }
 
   @override
@@ -117,7 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: Center(
           child: Text(
-        'Connection Status: ${_connectionStatus}',
+        'Connection Status: $_connectionStatus',
         style: TextStyle(color: _connectionStatusColor),
       )),
     );
