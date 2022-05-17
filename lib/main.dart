@@ -1,10 +1,14 @@
 import 'dart:async';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:developer' as developer;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +32,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       home: MyHomePage(
-        title: "Einstein's POC",
+        title: "Connectivity / Events",
         analytics: analytics,
         observer: observer,
       ),
@@ -53,34 +57,21 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String _message = '';
+  String _connectionType = "None";
+  String _connectionWifiName = "Unknown";
   Color _connectionStatusColor = Colors.red;
+
+  final NetworkInfo _networkInfo = NetworkInfo();
   final Connectivity _connectivity = Connectivity();
-  String _connectionStatus = "SEM CONEXAO";
 
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
-
-  void setMessage(String message) {
-    setState(() => _message = message);
-  }
-
-  Future<void> _sendAnalyticsEvent(String status, String type) async {
-    await widget.analytics.logEvent(
-      name: 'connectivity_status',
-      parameters: <String, dynamic>{
-        'string': 'string',
-        'status': status,
-        'type': type,
-      },
-    );
-    setMessage('_sendAnalyticsEvent succeeded');
-  }
 
   @override
   void initState() {
     super.initState();
 
-    initConnectivity();
+    _initConnectivity();
+    _initNetworkInfo();
 
     _connectivitySubscription =
         _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
@@ -92,7 +83,59 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-  Future<void> initConnectivity() async {
+  Future<void> _initNetworkInfo() async {
+    String? wifiName;
+    String? wifiSSID;
+
+    try {
+      if (Platform.isIOS) {
+        var status = await _networkInfo.getLocationServiceAuthorization();
+        if (status == LocationAuthorizationStatus.notDetermined) {
+          status = await _networkInfo.requestLocationServiceAuthorization();
+        }
+        if (status == LocationAuthorizationStatus.authorizedAlways ||
+            status == LocationAuthorizationStatus.authorizedWhenInUse) {
+          wifiName = await _networkInfo.getWifiName();
+        } else {
+          wifiName = await _networkInfo.getWifiName();
+        }
+      } else {
+        var status = await Permission.location.status;
+
+        print("##### ANDROID permission $status");
+
+        if (status.isLimited || status.isDenied || status.isRestricted) {
+          if (await Permission.location.request().isGranted) {
+            // Either the permission was already granted before or the user just granted it.
+          }
+        }
+
+        wifiName = await _networkInfo.getWifiName();
+        wifiSSID = await _networkInfo.getWifiBSSID();
+      }
+    } on PlatformException catch (e) {
+      developer.log('Failed to get Wifi Name', error: e);
+      wifiName = 'Failed to get Wifi Name';
+    }
+
+    print("#### NAME $wifiName - $wifiSSID");
+
+    setState(() => _connectionWifiName = wifiName!);
+  }
+
+  Future<void> _sendAnalyticsEvent(
+      String status, String type, String name) async {
+    await widget.analytics.logEvent(
+      name: 'connectivity_status',
+      parameters: <String, dynamic>{
+        'status': status,
+        'type': type,
+        'name': name,
+      },
+    );
+  }
+
+  Future<void> _initConnectivity() async {
     late ConnectivityResult result;
     try {
       result = await _connectivity.checkConnectivity();
@@ -107,34 +150,37 @@ class _MyHomePageState extends State<MyHomePage> {
     return _updateConnectionStatus(result);
   }
 
-  void showStatus(ConnectivityResult result, bool status) {
-    final textStatus = status ? 'ONLINE' : 'OFFLINE';
+  void _showStatus(ConnectivityResult result, bool status) {
+    final textStatus = status ? 'ON LINE' : 'OFF LINE';
     final snackBar = SnackBar(
         content: Text(textStatus), backgroundColor: _connectionStatusColor);
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
   Future<void> _updateConnectionStatus(ConnectivityResult result) async {
+    _initNetworkInfo();
+
     if (result == ConnectivityResult.wifi) {
-      setState(() => _connectionStatus = "Wifi");
+      setState(() => _connectionType = "Wifi");
       setState(() => _connectionStatusColor = Colors.green);
     } else if (result == ConnectivityResult.mobile) {
-      setState(() => _connectionStatus = "Mobile");
+      setState(() => _connectionType = "Mobile");
       setState(() => _connectionStatusColor = Colors.green);
     } else {
-      setState(() => _connectionStatus = "SEM CONEXÃO");
+      setState(() => _connectionWifiName = "Unknown");
+      setState(() => _connectionType = "None");
       setState(() => _connectionStatusColor = Colors.red);
     }
 
     if (result == ConnectivityResult.mobile ||
         result == ConnectivityResult.wifi) {
-      showStatus(result, true);
-      _sendAnalyticsEvent("ON LINE", _connectionStatus);
+      _showStatus(result, true);
+      _sendAnalyticsEvent("ON LINE", _connectionType, _connectionWifiName);
     } else {
-      showStatus(result, false);
-      _sendAnalyticsEvent("OFF LINE", _connectionStatus);
+      _showStatus(result, false);
+      _sendAnalyticsEvent("OFF LINE", _connectionType, _connectionWifiName);
     }
-    print("###### ${_connectionStatus}");
+    developer.log("###### $_connectionType");
   }
 
   @override
@@ -145,7 +191,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: Center(
           child: Text(
-        'Connection Status: $_connectionStatus',
+        'Connection Status: $_connectionType - $_connectionWifiName',
         style: TextStyle(color: _connectionStatusColor),
       )),
     );
